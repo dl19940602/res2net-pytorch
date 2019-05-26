@@ -7,9 +7,9 @@ TRAIN--
 
 In terminal:$python train.py --dataset cifar100 --arch XXX.model
 
+
 TABLE 4 Reproducibility results:
 models                        top-1.err     Params
-
 ResNext-29,8c×64w               19.38       34.52M
 Re2sNext-29,6c×24w×4scale       19.26       23.71M
 Re2sNext-29,8c×25w×4scale       18.67       32.96M
