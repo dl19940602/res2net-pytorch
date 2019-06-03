@@ -31,11 +31,11 @@ def parse_args():
                         choices=res2net.__all__,
                         help='model architecture')
     parser.add_argument('--epochs', default=300, type=int)
-    parser.add_argument('--lr', '--learning-rate', default=5e-2, type=float)
-    parser.add_argument('--milestones', default='125,225', type=str)
+    parser.add_argument('--lr', '--learning-rate', default=1e-1, type=float)
+    parser.add_argument('--milestones', default='150,225', type=str)
     parser.add_argument('--gamma', default=0.1, type=float)
     parser.add_argument('--momentum', default=0.9, type=float)
-    parser.add_argument('--weight-decay', default=1e-4, type=float)
+    parser.add_argument('--weight-decay', default=5e-4, type=float)
     parser.add_argument('--nesterov', default=False, type=str2bool)
 
     args = parser.parse_args()
