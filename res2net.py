@@ -44,20 +44,21 @@ class SEModule(nn.Module):       #SE block
 class Res2NetBottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, width, downsample=None, stride=1, scales=6, groups=6, se=False, norm_layer=None):
+    def __init__(self, inplanes, planes, width, downsample=None, stride=1, scales=4, groups=1, se=False, norm_layer=None):
         super(Res2NetBottleneck, self).__init__()
 #        if planes % scales != 0:
 #            raise ValueError('Planes must be divisible by scales')
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         bottleneck_planes = int(width * scales * groups)
-        self.conv1 = conv1x1(inplanes, bottleneck_planes, stride)#C*D
+        self.conv1 = conv1x1(inplanes, bottleneck_planes)#C*D
         self.bn1 = norm_layer(bottleneck_planes)
-        self.conv2 = nn.ModuleList([conv3x3(bottleneck_planes // scales, bottleneck_planes // scales, groups=groups) for _ in range(scales-1)]) #k1,k2,k3后接3×3卷积，分组卷积
+        self.conv2 = nn.ModuleList([conv3x3(bottleneck_planes // scales, bottleneck_planes // scales, stride, groups=groups) for _ in range(scales-1)]) #k1,k2,k3后接3×3卷积，分组卷积
         self.bn2 = nn.ModuleList([norm_layer(bottleneck_planes // scales) for _ in range(scales-1)])
         self.conv3 = conv1x1(bottleneck_planes, planes * self.expansion)#输出concat操作
         self.bn3 = norm_layer(planes * self.expansion)
         self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.se = SEModule(planes * self.expansion) if se else None
         self.downsample = downsample
         self.stride = stride
@@ -72,13 +73,21 @@ class Res2NetBottleneck(nn.Module):
 
         xs = torch.chunk(out, self.scales, 1)#将输入张量进行分块
         ys = []
-        for s in range(self.scales):
-            if s == 0:
-                ys.append(xs[s])
-            elif s == 1:
-                ys.append(self.relu(self.bn2[s-1](self.conv2[s-1](xs[s]))))
-            else:
-                ys.append(self.relu(self.bn2[s-1](self.conv2[s-1](xs[s] + ys[-1]))))
+        if self.stride == 1:
+            for s in range(self.scales):
+                if s == 0:
+                    ys.append(xs[s])
+                elif s == 1:
+                    ys.append(self.relu(self.bn2[s-1](self.conv2[s-1](xs[s]))))
+                else:
+                    ys.append(self.relu(self.bn2[s-1](self.conv2[s-1](xs[s] + ys[-1]))))
+        
+        else:
+            for s in range(self.scales):
+                if s == 0:
+                    ys.append(self.maxpool(xs[s]))
+                else:
+                    ys.append(self.relu(self.bn2[s-1](self.conv2[s-1](xs[s]))))
         out = torch.cat(ys, 1)#concat操作
 
         out = self.conv3(out)
@@ -98,7 +107,7 @@ class Res2NetBottleneck(nn.Module):
 
 class ImageNetRes2Net(nn.Module):
     def __init__(self, layers, num_classes=100, zero_init_residual=False,
-                 groups=1, width=16, scales=8, se=False, norm_layer=None):
+                 groups=1, width=16, scales=4, se=False, norm_layer=None):
         super(ImageNetRes2Net, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -109,10 +118,10 @@ class ImageNetRes2Net(nn.Module):
         self.bn1 = norm_layer(64)
         self.relu = nn.ReLU(inplace=True)
 #        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(Res2NetBottleneck, 64, 14, layers[0], scales=scales, groups=groups, se=se, norm_layer=norm_layer)
-        self.layer2 = self._make_layer(Res2NetBottleneck, 128, 28, layers[1], stride=2, scales=scales, groups=groups, se=se, norm_layer=norm_layer)
-        self.layer3 = self._make_layer(Res2NetBottleneck, 256, 56, layers[2], stride=2, scales=scales, groups=groups, se=se, norm_layer=norm_layer)
-        self.layer4 = self._make_layer(Res2NetBottleneck, 512, 112, layers[3], stride=2, scales=scales, groups=groups, se=se, norm_layer=norm_layer)
+        self.layer1 = self._make_layer(Res2NetBottleneck, 64, 26, layers[0], scales=scales, groups=groups, se=se, norm_layer=norm_layer)
+        self.layer2 = self._make_layer(Res2NetBottleneck, 128, 52, layers[1], stride=2, scales=scales, groups=groups, se=se, norm_layer=norm_layer)
+        self.layer3 = self._make_layer(Res2NetBottleneck, 256, 104, layers[2], stride=2, scales=scales, groups=groups, se=se, norm_layer=norm_layer)
+        self.layer4 = self._make_layer(Res2NetBottleneck, 512, 208, layers[3], stride=2, scales=scales, groups=groups, se=se, norm_layer=norm_layer)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * Res2NetBottleneck.expansion, num_classes)
 
@@ -128,7 +137,7 @@ class ImageNetRes2Net(nn.Module):
                 if isinstance(m, Res2NetBottleneck):
                     nn.init.constant_(m.bn3.weight, 0)
 
-    def _make_layer(self, block, planes, width, blocks, stride=1, scales=8, groups=1, se=False, norm_layer=None):
+    def _make_layer(self, block, planes, width, blocks, stride=1, scales=4, groups=1, se=False, norm_layer=None):
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         downsample = None
@@ -228,7 +237,7 @@ class CifarRes2Net(nn.Module):
         return x
 
 
-def res2net50_14_8(**kwargs):
+def res2net50(**kwargs):
     """Constructs a Res2Net-50 model.
     """
     model = ImageNetRes2Net([3, 4, 6, 3], **kwargs)
