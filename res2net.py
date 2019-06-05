@@ -175,7 +175,7 @@ class ImageNetRes2Net(nn.Module):
 
 class CifarRes2Net(nn.Module):
     def __init__(self, layers, num_classes=100, zero_init_residual=False,
-                 groups=6, width=64, scales=6, se=False, norm_layer=None):
+                 groups=6, width=64, scales=4, se=False, norm_layer=None):
         super(CifarRes2Net, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -203,7 +203,7 @@ class CifarRes2Net(nn.Module):
                 if isinstance(m, Res2NetBottleneck):
                     nn.init.constant_(m.bn3.weight, 0)
 
-    def _make_layer(self, block, planes, width, blocks, stride=1, scales=6, groups=6, se=False, norm_layer=None):
+    def _make_layer(self, block, planes, width, blocks, stride=1, scales=4, groups=6, se=False, norm_layer=None):
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         downsample = None
